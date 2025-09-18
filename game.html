@@ -27,9 +27,9 @@
             width: 100%;
             height: 100%;
             background:
-                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.15) 0%, transparent 50%),
-                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.1) 0%, transparent 50%);
+                radial-gradient(circle at 20% 80%, rgba(70, 130, 220, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(50, 100, 200, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 180, 255, 0.1) 0%, transparent 50%);
             pointer-events: none;
             z-index: -1;
         }
@@ -41,10 +41,10 @@
                 0 20px 40px rgba(0, 0, 0, 0.5),
                 inset 0 0 30px rgba(255, 255, 255, 0.1);
             background: linear-gradient(180deg,
-                #667eea 0%,
-                #764ba2 30%,
-                #f093fb 60%,
-                #f5576c 80%,
+                #4a90e2 0%,
+                #357abd 30%,
+                #2c5e9c 60%,
+                #1e4080 80%,
                 #4facfe 100%);
         }
 
@@ -74,7 +74,7 @@
             left: -1px;
             right: -1px;
             bottom: -1px;
-            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #667eea);
+            background: linear-gradient(45deg, #4a90e2, #357abd, #2c5e9c, #4a90e2);
             border-radius: 25px;
             z-index: -1;
             opacity: 0.3;
@@ -83,7 +83,7 @@
 </head>
 <body>
     <div class="instructions">
-        Arrow keys to move | SPACE to jump (double jump available)! | 0-9 to switch levels | R to restart | N for next level
+        Arrow keys to move | SPACE to jump (double jump available)! | R to restart speedrun
     </div>
     <canvas id="gameCanvas" width="800" height="400"></canvas>
     
@@ -297,6 +297,11 @@
         // Game state
         let gameWon = false;
         let gameLost = false;
+        let speedrunStartTime = null;
+        let speedrunCompleted = false;
+        let completionTime = null;
+        let autoAdvanceTimeout = null;
+        let autoRestartTimeout = null;
 
         // Input state
         const keys = {
@@ -308,13 +313,13 @@
             // Create animated gradient background
             const time = Date.now() * 0.001;
 
-            // Main gradient
+            // Main gradient - all blue tones
             const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, `hsl(${230 + Math.sin(time * 0.5) * 10}, 70%, ${60 + Math.sin(time * 0.3) * 10}%)`);
-            gradient.addColorStop(0.3, `hsl(${260 + Math.cos(time * 0.4) * 15}, 65%, ${50 + Math.cos(time * 0.2) * 8}%)`);
-            gradient.addColorStop(0.6, `hsl(${300 + Math.sin(time * 0.6) * 12}, 75%, ${55 + Math.sin(time * 0.4) * 12}%)`);
-            gradient.addColorStop(0.8, `hsl(${340 + Math.cos(time * 0.3) * 8}, 80%, ${50 + Math.cos(time * 0.5) * 10}%)`);
-            gradient.addColorStop(1, `hsl(${200 + Math.sin(time * 0.2) * 20}, 85%, ${65 + Math.sin(time * 0.6) * 15}%)`);
+            gradient.addColorStop(0, `hsl(${210 + Math.sin(time * 0.5) * 10}, 70%, ${65 + Math.sin(time * 0.3) * 10}%)`);
+            gradient.addColorStop(0.3, `hsl(${220 + Math.cos(time * 0.4) * 8}, 65%, ${55 + Math.cos(time * 0.2) * 8}%)`);
+            gradient.addColorStop(0.6, `hsl(${200 + Math.sin(time * 0.6) * 12}, 75%, ${50 + Math.sin(time * 0.4) * 12}%)`);
+            gradient.addColorStop(0.8, `hsl(${190 + Math.cos(time * 0.3) * 8}, 80%, ${45 + Math.cos(time * 0.5) * 10}%)`);
+            gradient.addColorStop(1, `hsl(${180 + Math.sin(time * 0.2) * 15}, 85%, ${60 + Math.sin(time * 0.6) * 15}%)`);
 
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -545,16 +550,31 @@
                 player.y < goal.y + goal.height &&
                 player.y + player.height > goal.y) {
                 gameWon = true;
+
+                // Check if this completes the speedrun
+                if (currentLevel === 10 && !speedrunCompleted) {
+                    speedrunCompleted = true;
+                    completionTime = Date.now() - speedrunStartTime;
+                } else if (currentLevel < 10) {
+                    // Auto-advance to next level for levels 1-9
+                    autoAdvanceLevel();
+                }
             }
 
             // Check if player fell off screen
-            if (player.y > canvas.height) {
+            if (player.y > canvas.height && !gameLost) {
                 gameLost = true;
+                autoRestartLevel();
             }
         }
         
         function updatePlayer() {
             if (gameWon || gameLost) return;
+
+            // Start speedrun timer on first movement
+            if (!speedrunStartTime && !speedrunCompleted && (keys.left || keys.right)) {
+                speedrunStartTime = Date.now();
+            }
 
             // Handle horizontal input and acceleration
             if (keys.left) {
@@ -612,7 +632,7 @@
         function drawUI() {
             // Draw level indicator with glow
             ctx.save();
-            ctx.shadowColor = '#667eea';
+            ctx.shadowColor = '#4a90e2';
             ctx.shadowBlur = 10;
             ctx.fillStyle = '#e2e8f0';
             ctx.font = 'bold 18px "Orbitron", monospace';
@@ -626,107 +646,90 @@
             ctx.textAlign = 'left';
             ctx.fillText(levels[currentLevel].name, 15, 45);
 
-            // Jump counter with background
-            const jumpText = `JUMPS: ${player.jumpCount}/${player.maxJumps}`;
-            ctx.font = '16px "Exo 2", sans-serif';
-            const textWidth = ctx.measureText(jumpText).width;
+            // Draw speedrun timer (top right)
+            const currentTime = getCurrentTime();
+            const timeText = formatTime(currentTime);
 
-            // Jump counter background
-            const bgGradient = ctx.createLinearGradient(10, 55, 10 + textWidth + 20, 75);
-            bgGradient.addColorStop(0, 'rgba(26, 32, 46, 0.9)');
-            bgGradient.addColorStop(1, 'rgba(74, 85, 104, 0.9)');
-
-            ctx.fillStyle = bgGradient;
-            ctx.fillRect(10, 55, textWidth + 20, 25);
-
-            // Jump counter border
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(10, 55, textWidth + 20, 25);
-
-            // Jump counter text
-            ctx.fillStyle = player.jumpCount >= player.maxJumps ? '#ff6b6b' : '#74b9ff';
-            ctx.textAlign = 'left';
-            ctx.fillText(jumpText, 20, 73);
-
-            // Velocity indicator (small bar in corner)
-            const velocityBarWidth = 60;
-            const velocityBarHeight = 8;
-            const velocityPercent = Math.min(Math.abs(player.velocityX) / 8, 1);
-
-            ctx.fillStyle = 'rgba(26, 32, 46, 0.9)';
-            ctx.fillRect(canvas.width - velocityBarWidth - 15, 15, velocityBarWidth, velocityBarHeight);
-
-            ctx.fillStyle = velocityPercent > 0.7 ? '#ff6b6b' : velocityPercent > 0.4 ? '#fdcb6e' : '#74b9ff';
-            ctx.fillRect(canvas.width - velocityBarWidth - 15, 15, velocityBarWidth * velocityPercent, velocityBarHeight);
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(canvas.width - velocityBarWidth - 15, 15, velocityBarWidth, velocityBarHeight);
-
-            // Velocity label
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.font = '10px "Exo 2", sans-serif';
+            ctx.save();
+            ctx.shadowColor = speedrunCompleted ? '#00ff00' : '#4a90e2';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = speedrunCompleted ? '#00ff88' : '#e2e8f0';
+            ctx.font = 'bold 24px "Orbitron", monospace';
             ctx.textAlign = 'right';
-            ctx.fillText('SPEED', canvas.width - 18, 13);
+            ctx.fillText(timeText, canvas.width - 15, 35);
+            ctx.restore();
 
-            // Level progress indicator (bottom center)
-            const progressWidth = 200;
-            const progressHeight = 8;
-            const progressX = (canvas.width - progressWidth) / 2;
-            const progressY = canvas.height - 20;
-            const progress = currentLevel / 10;
-
-            // Progress background
-            ctx.fillStyle = 'rgba(26, 32, 46, 0.9)';
-            ctx.fillRect(progressX, progressY, progressWidth, progressHeight);
-
-            // Progress fill
-            const progressGradient = ctx.createLinearGradient(progressX, progressY, progressX + progressWidth, progressY);
-            progressGradient.addColorStop(0, '#667eea');
-            progressGradient.addColorStop(0.5, '#764ba2');
-            progressGradient.addColorStop(1, '#f093fb');
-
-            ctx.fillStyle = progressGradient;
-            ctx.fillRect(progressX, progressY, progressWidth * progress, progressHeight);
-
-            // Progress border
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(progressX, progressY, progressWidth, progressHeight);
-
-            // Progress text
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            // Timer label
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.font = '12px "Exo 2", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${currentLevel}/10`, canvas.width / 2, progressY - 5);
+            ctx.textAlign = 'right';
+            ctx.fillText(speedrunCompleted ? 'FINAL TIME' : 'TIME', canvas.width - 15, 50);
+
+
+
         }
         
         function drawGameState() {
-            if (gameWon) {
-                ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+            if (speedrunCompleted) {
+                // Speedrun completion screen
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.9)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.save();
+                ctx.shadowColor = '#00ff00';
+                ctx.shadowBlur = 20;
                 ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
+                ctx.font = 'bold 48px "Orbitron", monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText(`Level ${currentLevel} Complete!`, canvas.width / 2, canvas.height / 2);
-                ctx.font = '24px Arial';
+                ctx.fillText('SPEEDRUN COMPLETE!', canvas.width / 2, canvas.height / 2 - 40);
+                ctx.restore();
+
+                ctx.fillStyle = '#00ff88';
+                ctx.font = 'bold 36px "Orbitron", monospace';
+                ctx.fillText(formatTime(completionTime), canvas.width / 2, canvas.height / 2 + 20);
+
+                ctx.fillStyle = 'white';
+                ctx.font = '20px "Exo 2", sans-serif';
+                ctx.fillText('Press R to restart speedrun', canvas.width / 2, canvas.height / 2 + 70);
+            } else if (gameWon) {
+                // Level completion
+                ctx.fillStyle = 'rgba(0, 200, 255, 0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 36px "Orbitron", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Level ${currentLevel} Complete!`, canvas.width / 2, canvas.height / 2 - 30);
+
+                // Show current time
+                ctx.fillStyle = '#00ff88';
+                ctx.font = '24px "Orbitron", monospace';
+                ctx.fillText(`Time: ${formatTime(getCurrentTime())}`, canvas.width / 2, canvas.height / 2 + 10);
+
+                // Auto-advance message for levels 1-9
                 if (currentLevel < Object.keys(levels).length) {
-                    ctx.fillText('Press N for next level or R to restart', canvas.width / 2, canvas.height / 2 + 50);
-                } else {
-                    ctx.fillText('All levels complete! Press R to restart', canvas.width / 2, canvas.height / 2 + 50);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.font = '18px "Exo 2", sans-serif';
+                    ctx.fillText('Next level starting in 2 seconds...', canvas.width / 2, canvas.height / 2 + 50);
                 }
             }
-            
+
             if (gameLost) {
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+                // Death screen
+                ctx.fillStyle = 'rgba(255, 50, 50, 0.8)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
                 ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
+                ctx.font = 'bold 36px "Orbitron", monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText('Try Again!', canvas.width / 2, canvas.height / 2);
-                ctx.font = '24px Arial';
-                ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 50);
+                ctx.fillText('Level Failed!', canvas.width / 2, canvas.height / 2 - 20);
+
+                ctx.font = '18px "Exo 2", sans-serif';
+                ctx.fillText('Restarting level...', canvas.width / 2, canvas.height / 2 + 20);
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '14px "Exo 2", sans-serif';
+                ctx.fillText('Timer continues running', canvas.width / 2, canvas.height / 2 + 50);
             }
         }
         
@@ -748,10 +751,33 @@
             player.jumpCount = 0;
         }
         
-        function resetGame() {
+        function resetCurrentLevel() {
             resetPlayer();
             gameWon = false;
             gameLost = false;
+            // Timer continues running
+        }
+
+        function resetSpeedrun() {
+            // Clear any pending timeouts first to prevent glitches
+            if (autoAdvanceTimeout) {
+                clearTimeout(autoAdvanceTimeout);
+                autoAdvanceTimeout = null;
+            }
+            if (autoRestartTimeout) {
+                clearTimeout(autoRestartTimeout);
+                autoRestartTimeout = null;
+            }
+
+            currentLevel = 1;
+            platforms = levels[currentLevel].platforms;
+            goal = levels[currentLevel].goal;
+            resetPlayer();
+            gameWon = false;
+            gameLost = false;
+            speedrunStartTime = null;
+            speedrunCompleted = false;
+            completionTime = null;
         }
         
         function nextLevel() {
@@ -760,6 +786,51 @@
                 gameWon = false;
                 gameLost = false;
             }
+        }
+
+        function autoAdvanceLevel() {
+            // Called when level is completed - advances to next level after delay
+            if (currentLevel < Object.keys(levels).length) {
+                // Clear any existing timeout first
+                if (autoAdvanceTimeout) {
+                    clearTimeout(autoAdvanceTimeout);
+                }
+                autoAdvanceTimeout = setTimeout(() => {
+                    nextLevel();
+                    autoAdvanceTimeout = null;
+                }, 2000); // 2 second delay
+            }
+        }
+
+        function autoRestartLevel() {
+            // Called when player dies - restarts current level only
+            // Clear any existing timeout first
+            if (autoRestartTimeout) {
+                clearTimeout(autoRestartTimeout);
+            }
+            autoRestartTimeout = setTimeout(() => {
+                resetCurrentLevel();
+                autoRestartTimeout = null;
+            }, 1500); // Brief delay to show death state
+        }
+
+        function formatTime(milliseconds) {
+            if (!milliseconds) return "0:00.00";
+            const totalSeconds = milliseconds / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const centiseconds = Math.floor((totalSeconds % 1) * 100);
+            return `${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+        }
+
+        function getCurrentTime() {
+            if (speedrunCompleted && completionTime) {
+                return completionTime;
+            }
+            if (speedrunStartTime) {
+                return Date.now() - speedrunStartTime;
+            }
+            return 0;
         }
         
         function gameLoop() {
@@ -795,41 +866,7 @@
                 keys.right = true;
             }
             if (e.code === 'KeyR') {
-                resetGame();
-            }
-            if (e.code === 'KeyN' && gameWon) {
-                nextLevel();
-            }
-            // Level switching with number keys
-            if (e.code === 'Digit0') {
-                loadLevel(10);
-            }
-            if (e.code === 'Digit1') {
-                loadLevel(1);
-            }
-            if (e.code === 'Digit2') {
-                loadLevel(2);
-            }
-            if (e.code === 'Digit3') {
-                loadLevel(3);
-            }
-            if (e.code === 'Digit4') {
-                loadLevel(4);
-            }
-            if (e.code === 'Digit5') {
-                loadLevel(5);
-            }
-            if (e.code === 'Digit6') {
-                loadLevel(6);
-            }
-            if (e.code === 'Digit7') {
-                loadLevel(7);
-            }
-            if (e.code === 'Digit8') {
-                loadLevel(8);
-            }
-            if (e.code === 'Digit9') {
-                loadLevel(9);
+                resetSpeedrun();
             }
         });
 
