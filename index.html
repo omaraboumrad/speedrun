@@ -95,6 +95,11 @@
         const gravity = 0.8;
         const jumpPower = -15;
         const moveSpeed = 5;
+
+        // Delta time tracking for frame-independent movement
+        let lastFrameTime = performance.now();
+        const targetFPS = 60;
+        const targetFrameTime = 1000 / targetFPS;
         
         // Player object
         const player = {
@@ -568,7 +573,7 @@
             }
         }
         
-        function updatePlayer() {
+        function updatePlayer(deltaTime) {
             if (gameWon || gameLost) return;
 
             // Start speedrun timer on first movement
@@ -578,17 +583,17 @@
 
             // Handle horizontal input and acceleration
             if (keys.left) {
-                player.velocityX -= 0.8;
+                player.velocityX -= 0.8 * deltaTime;
             }
             if (keys.right) {
-                player.velocityX += 0.8;
+                player.velocityX += 0.8 * deltaTime;
             }
 
             // Apply horizontal friction when on ground and no input
             if (player.onGround && !keys.left && !keys.right) {
-                player.velocityX *= 0.85; // Ground friction
+                player.velocityX *= Math.pow(0.85, deltaTime); // Ground friction
             } else if (!player.onGround) {
-                player.velocityX *= 0.98; // Air resistance (minimal)
+                player.velocityX *= Math.pow(0.98, deltaTime); // Air resistance (minimal)
             }
 
             // Cap horizontal velocity
@@ -600,7 +605,7 @@
             if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0;
 
             // Apply horizontal velocity
-            player.x += player.velocityX;
+            player.x += player.velocityX * deltaTime;
 
             // Keep player within screen bounds
             if (player.x < 0) {
@@ -613,8 +618,8 @@
             }
 
             // Apply gravity
-            player.velocityY += gravity;
-            player.y += player.velocityY;
+            player.velocityY += gravity * deltaTime;
+            player.y += player.velocityY * deltaTime;
 
             // Check collisions
             checkCollisions();
@@ -834,11 +839,19 @@
         }
         
         function gameLoop() {
+            // Calculate delta time
+            const currentTime = performance.now();
+            const deltaTimeMs = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            // Normalize to 60 FPS (1.0 = running at exactly 60 FPS)
+            const deltaTime = deltaTimeMs / targetFrameTime;
+
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // Update game
-            updatePlayer();
+            updatePlayer(deltaTime);
 
             // Draw everything
             drawBackground();
